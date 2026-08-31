@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="mail_template_rental_contract_signature" model="mail.template">
+        <field name="name">Rental Contract: Signature Request</field>
+        <field name="model_id" ref="model_rental_contract"/>
+        <field name="subject">Please sign rental contract {{ object.name }}</field>
+        <field name="email_from">{{ object.company_id.email_formatted or user.email_formatted }}</field>
+        <field name="email_to">{{ object.partner_id.email_formatted }}</field>
+        <field name="description">Sent to a tenant when a rental contract needs signing</field>
+        <field name="body_html" type="html">
+            <div style="margin: 0; padding: 0;">
+                <p>Hello <t t-out="object.partner_id.name"/>,</p>
+                <p>Your rental contract <strong><t t-out="object.name"/></strong> for
+                    <strong><t t-out="object.unit_id.display_name"/></strong> is ready for review and signature.</p>
+                <p style="margin: 24px 0;">
+                    <a t-att-href="object.get_portal_url()" style="background-color:#714B67;color:#fff;padding:10px 18px;text-decoration:none;border-radius:3px;">Review and Sign</a>
+                </p>
+                <p>Rental period: <t t-out="object.date_start"/> through <t t-out="object.date_end"/>.</p>
+            </div>
+        </field>
+        <field name="auto_delete" eval="True"/>
+    </record>
+    <record id="mail_template_rental_application_documents" model="mail.template">
+        <field name="name">Rental Application: Document Request</field>
+        <field name="model_id" ref="model_rental_application"/>
+        <field name="subject">Documents required for rental application {{ object.name }}</field>
+        <field name="email_from">{{ object.company_id.email_formatted or user.email_formatted }}</field>
+        <field name="email_to">{{ object.partner_id.email_formatted }}</field>
+        <field name="description">Secure request for prospective tenant application documents</field>
+        <field name="body_html" type="html">
+            <div style="margin: 0; padding: 0;">
+                <p>Hello <t t-out="object.partner_id.name"/>,</p>
+                <p>To continue reviewing rental application <strong><t t-out="object.name"/></strong>, please securely upload:</p>
+                <ul>
+                    <li>Employment or job letter</li>
+                    <li>Certificate of character</li>
+                    <li>Primary form of identification</li>
+                    <li>A distinct secondary form of identification</li>
+                </ul>
+                <p style="margin: 24px 0;">
+                    <a t-att-href="object.get_portal_url()" style="background-color:#714B67;color:#fff;padding:10px 18px;text-decoration:none;border-radius:3px;">Upload Documents Securely</a>
+                </p>
+                <p>Accepted formats: PDF, JPG, JPEG, or PNG, up to 10 MB per file.</p>
+            </div>
+        </field>
+        <field name="auto_delete" eval="True"/>
+    </record>
+    <record id="mail_template_rental_notice" model="mail.template">
+        <field name="name">Rental: Tenant Notice Delivery</field>
+        <field name="model_id" ref="model_rental_notice"/>
+        <field name="subject">{{ object.subject }}</field>
+        <field name="email_from">{{ object.company_id.email_formatted or user.email_formatted }}</field>
+        <field name="email_to">{{ object.partner_id.email_formatted }}</field>
+        <field name="description">Delivers a reviewed tenant notice with its archived PDF</field>
+        <field name="body_html" type="html">
+            <div style="margin: 0; padding: 0;">
+                <p>Hello <t t-out="object.partner_id.name"/>,</p>
+                <p>Please find attached notice <strong><t t-out="object.name"/></strong>
+                    concerning rental contract <strong><t t-out="object.contract_id.name"/></strong>.</p>
+                <div t-out="object.body_html"/>
+                <p>Please retain the attached PDF for your records.</p>
+            </div>
+        </field>
+        <field name="auto_delete" eval="True"/>
+    </record>
+</odoo>

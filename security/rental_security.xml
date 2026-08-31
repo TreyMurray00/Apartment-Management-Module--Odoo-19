@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="module_category_rental" model="ir.module.category">
+        <field name="name">Rental Management</field>
+        <field name="sequence">35</field>
+    </record>
+    <record id="rental_privilege" model="res.groups.privilege">
+        <field name="name">Rental Management</field>
+        <field name="category_id" ref="module_category_rental"/>
+        <field name="sequence">10</field>
+    </record>
+    <record id="group_rental_user" model="res.groups">
+        <field name="name">User</field>
+        <field name="privilege_id" ref="rental_privilege"/>
+        <field name="implied_ids" eval="[Command.set([ref('base.group_user')])]"/>
+    </record>
+    <record id="group_rental_manager" model="res.groups">
+        <field name="name">Administrator</field>
+        <field name="privilege_id" ref="rental_privilege"/>
+        <field name="implied_ids" eval="[Command.set([ref('group_rental_user'), ref('account.group_account_invoice')])]"/>
+    </record>
+
+    <data noupdate="1">
+        <record id="rental_property_company_rule" model="ir.rule">
+            <field name="name">Rental properties by company</field>
+            <field name="model_id" ref="model_rental_property"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_unit_company_rule" model="ir.rule">
+            <field name="name">Rental units by company</field>
+            <field name="model_id" ref="model_rental_unit"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_contract_company_rule" model="ir.rule">
+            <field name="name">Rental contracts by company</field>
+            <field name="model_id" ref="model_rental_contract"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+            <field name="groups" eval="[Command.link(ref('group_rental_user'))]"/>
+        </record>
+        <record id="rental_contract_template_company_rule" model="ir.rule">
+            <field name="name">Rental contract templates by company</field>
+            <field name="model_id" ref="model_rental_contract_template"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_billing_company_rule" model="ir.rule">
+            <field name="name">Rental billing lines by company</field>
+            <field name="model_id" ref="model_rental_billing_line"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_charge_company_rule" model="ir.rule">
+            <field name="name">Tenant charges by company</field>
+            <field name="model_id" ref="model_rental_charge"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+            <field name="groups" eval="[Command.link(ref('group_rental_user'))]"/>
+        </record>
+        <record id="rental_charge_portal_rule" model="ir.rule">
+            <field name="name">Portal tenants can read their charges</field>
+            <field name="model_id" ref="model_rental_charge"/>
+            <field name="domain_force">[('contract_id.partner_id', 'child_of', [user.partner_id.commercial_partner_id.id])]</field>
+            <field name="groups" eval="[Command.link(ref('base.group_portal'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+        <record id="rental_contract_portal_rule" model="ir.rule">
+            <field name="name">Portal tenants can read their contracts</field>
+            <field name="model_id" ref="model_rental_contract"/>
+            <field name="domain_force">[('partner_id', 'child_of', [user.partner_id.commercial_partner_id.id])]</field>
+            <field name="groups" eval="[Command.link(ref('base.group_portal'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+        <record id="rental_application_company_rule" model="ir.rule">
+            <field name="name">Tenant applications by company</field>
+            <field name="model_id" ref="model_rental_application"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+            <field name="groups" eval="[Command.link(ref('group_rental_user'))]"/>
+        </record>
+        <record id="rental_application_document_company_rule" model="ir.rule">
+            <field name="name">Applicant documents by company</field>
+            <field name="model_id" ref="model_rental_application_document"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+            <field name="groups" eval="[Command.link(ref('group_rental_manager'))]"/>
+        </record>
+        <record id="rental_notice_template_company_rule" model="ir.rule">
+            <field name="name">Rental notice templates by company</field>
+            <field name="model_id" ref="model_rental_notice_template"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+            <field name="groups" eval="[Command.link(ref('group_rental_user'))]"/>
+        </record>
+        <record id="rental_notice_company_rule" model="ir.rule">
+            <field name="name">Tenant notices by company</field>
+            <field name="model_id" ref="model_rental_notice"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+            <field name="groups" eval="[Command.link(ref('group_rental_user'))]"/>
+        </record>
+        <record id="rental_contract_violation_company_rule" model="ir.rule">
+            <field name="name">Contract violations by company</field>
+            <field name="model_id" ref="model_rental_contract_violation"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+            <field name="groups" eval="[Command.link(ref('group_rental_user'))]"/>
+        </record>
+        <record id="rental_application_portal_rule" model="ir.rule">
+            <field name="name">Portal applicants can read their applications</field>
+            <field name="model_id" ref="model_rental_application"/>
+            <field name="domain_force">[('partner_id', 'child_of', [user.partner_id.commercial_partner_id.id])]</field>
+            <field name="groups" eval="[Command.link(ref('base.group_portal'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+    </data>
+</odoo>

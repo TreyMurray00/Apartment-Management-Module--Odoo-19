@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="action_report_rental_contract" model="ir.actions.report">
+        <field name="name">Rental Contract</field>
+        <field name="model">rental.contract</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">apartment_rental_management.report_rental_contract_document</field>
+        <field name="report_file">apartment_rental_management.report_rental_contract_document</field>
+        <field name="print_report_name">object._get_report_base_filename()</field>
+        <field name="binding_model_id" ref="model_rental_contract"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <template id="report_rental_contract_document">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <div class="page">
+                        <div class="text-center mb-4">
+                            <h2>Rental Agreement</h2>
+                            <h4 t-field="o.name"/>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <strong>Landlord / Manager</strong>
+                                <div t-field="o.company_id.name"/>
+                                <div t-field="o.manager_id.name"/>
+                            </div>
+                            <div class="col-6">
+                                <strong>Tenant</strong>
+                                <div t-field="o.partner_id" t-options="{'widget': 'contact', 'fields': ['name', 'address', 'email', 'phone'], 'no_marker': True}"/>
+                            </div>
+                        </div>
+                        <table class="table table-sm table-bordered mb-4">
+                            <tbody>
+                                <tr><th>Premises</th><td><span t-field="o.unit_id"/> — <span t-field="o.property_id"/></td></tr>
+                                <tr t-if="o.template_name"><th>Contract template</th><td><span t-field="o.template_name"/> — version <span t-field="o.template_version"/></td></tr>
+                                <tr t-if="o.amends_contract_id"><th>Amends contract</th><td><span t-field="o.amends_contract_id"/></td></tr>
+                                <tr><th>Rental type</th><td><span t-field="o.rental_type"/></td></tr>
+                                <tr><th>Term</th><td><span t-field="o.date_start"/> through <span t-field="o.date_end"/></td></tr>
+                                <tr><th>Billing</th><td><span t-field="o.rent_amount"/> <span t-field="o.billing_frequency"/></td></tr>
+                                <tr t-if="o.deposit_amount"><th>Security deposit</th><td><span t-field="o.deposit_amount"/></td></tr>
+                                <tr t-if="o.late_fee_enabled"><th>Late fee</th><td>
+                                    <t t-if="o.late_fee_calculation == 'fixed'"><span t-field="o.late_fee_amount"/></t>
+                                    <t t-else=""><span t-field="o.late_fee_percentage"/>% of outstanding balance</t>
+                                    after <span t-field="o.late_fee_grace_days"/> grace day(s)
+                                </td></tr>
+                                <tr><th>Scheduled rent total</th><td><span t-field="o.scheduled_rent_total"/></td></tr>
+                            </tbody>
+                        </table>
+
+                        <h4>Billing Schedule</h4>
+                        <table class="table table-sm">
+                            <thead><tr><th>Period</th><th>Invoice Date</th><th class="text-end">Amount</th></tr></thead>
+                            <tbody>
+                                <tr t-foreach="o.billing_line_ids.filtered(lambda l: l.state != 'cancelled')" t-as="line">
+                                    <td><span t-field="line.date_from"/> – <span t-field="line.date_to"/></td>
+                                    <td><span t-field="line.invoice_date"/></td>
+                                    <td class="text-end"><span t-field="line.amount"/></td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <h4>Terms and Conditions</h4>
+                        <div t-field="o.terms" class="mb-4"/>
+
+                        <div class="row mt-5" style="page-break-inside: avoid;">
+                            <div class="col-6 text-center">
+                                <strong>Tenant</strong>
+                                <div style="height: 90px;" class="d-flex align-items-end justify-content-center">
+                                    <img t-if="o.tenant_signature" t-att-src="image_data_uri(o.tenant_signature)" style="max-height: 80px; max-width: 90%;"/>
+                                </div>
+                                <div class="border-top pt-1"><span t-field="o.tenant_signed_by"/></div>
+                                <small t-if="o.tenant_signed_on">Signed <span t-field="o.tenant_signed_on"/></small>
+                            </div>
+                            <div class="col-6 text-center">
+                                <strong>Manager / Landlord</strong>
+                                <div style="height: 90px;" class="d-flex align-items-end justify-content-center">
+                                    <img t-if="o.manager_signature" t-att-src="image_data_uri(o.manager_signature)" style="max-height: 80px; max-width: 90%;"/>
+                                </div>
+                                <div class="border-top pt-1"><span t-field="o.manager_signed_by"/></div>
+                                <small t-if="o.manager_signed_on">Signed <span t-field="o.manager_signed_on"/></small>
+                            </div>
+                        </div>
+                        <div class="mt-4 text-muted" style="font-size: 9px;" t-if="o.tenant_signature_hash or o.manager_signature_hash">
+                            <div t-if="o.signed_document_hash">Signed document hash: <span t-field="o.signed_document_hash"/></div>
+                            <div t-if="o.tenant_signature_hash">Tenant signature audit hash: <span t-field="o.tenant_signature_hash"/></div>
+                            <div t-if="o.manager_signature_hash">Manager signature audit hash: <span t-field="o.manager_signature_hash"/></div>
+                        </div>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>

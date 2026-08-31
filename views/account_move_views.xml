@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_move_form_rental_contract" model="ir.ui.view">
+        <field name="name">account.move.form.rental.contract</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_move_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='invoice_origin']" position="after">
+                <field name="rental_contract_id" invisible="not rental_contract_id" readonly="1"/>
+                <field name="rental_billing_line_id" invisible="1"/>
+                <field name="rental_charge_id" invisible="not rental_charge_id" readonly="1"/>
+            </xpath>
+        </field>
+    </record>
+    <record id="action_rental_invoices" model="ir.actions.act_window">
+        <field name="name">Rental Invoices</field>
+        <field name="res_model">account.move</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('move_type', '=', 'out_invoice'), ('rental_contract_id', '!=', False)]</field>
+        <field name="context">{'default_move_type': 'out_invoice'}</field>
+    </record>
+</odoo>

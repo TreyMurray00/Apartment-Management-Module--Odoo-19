@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_rental_notice_template_list" model="ir.ui.view">
+        <field name="name">rental.notice.template.list</field>
+        <field name="model">rental.notice.template</field>
+        <field name="arch" type="xml">
+            <list string="Notice Templates" decoration-muted="not active">
+                <field name="name"/>
+                <field name="version"/>
+                <field name="notice_type"/>
+                <field name="default_ground"/>
+                <field name="cure_days"/>
+                <field name="delivery_method"/>
+                <field name="effective_date" optional="hide"/>
+                <field name="expiration_date" optional="hide"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="active" column_invisible="True"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_rental_notice_template_form" model="ir.ui.view">
+        <field name="name">rental.notice.template.form</field>
+        <field name="model">rental.notice.template</field>
+        <field name="arch" type="xml">
+            <form string="Notice Template">
+                <header>
+                    <button name="action_new_revision" string="Create New Revision" type="object" class="oe_highlight"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_notices" type="object" class="oe_stat_button" icon="fa-envelope-o">
+                            <field name="notice_count" widget="statinfo" string="Notices"/>
+                        </button>
+                    </div>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="e.g. First Late-Rent Letter"/></h1>
+                    </div>
+                    <group>
+                        <group string="Template">
+                            <field name="version"/>
+                            <field name="notice_type"/>
+                            <field name="default_ground"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="active" invisible="1"/>
+                        </group>
+                        <group string="Timing and Delivery">
+                            <field name="cure_days"/>
+                            <field name="delivery_method"/>
+                            <field name="effective_date"/>
+                            <field name="expiration_date"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Notice Content">
+                            <div class="alert alert-info" role="alert">
+                                Supported placeholders: {{ tenant_name }}, {{ tenant_address }}, {{ contract_number }},
+                                {{ unit }}, {{ property }}, {{ company_name }}, {{ notice_date }},
+                                {{ response_deadline }}, {{ amount_due }}, {{ invoice_references }},
+                                {{ consecutive_missed_payments }}, {{ grounds }}, {{ clause_references }},
+                                and {{ violation_details }}.
+                            </div>
+                            <field name="subject" placeholder="Notice regarding {{ contract_number }}"/>
+                            <field name="body_html" placeholder="Enter reviewed notice wording..."/>
+                        </page>
+                        <page string="Internal Notes"><field name="internal_notes"/></page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_rental_notice_template_search" model="ir.ui.view">
+        <field name="name">rental.notice.template.search</field>
+        <field name="model">rental.notice.template</field>
+        <field name="arch" type="xml">
+            <search string="Notice Templates">
+                <field name="name"/>
+                <field name="version"/>
+                <filter string="Late-Payment Letters" name="late" domain="[('notice_type', '=', 'late_payment')]"/>
+                <filter string="Eviction Notices" name="eviction" domain="[('notice_type', '=', 'eviction')]"/>
+                <filter string="Archived" name="archived" domain="[('active', '=', False)]"/>
+                <separator/>
+                <filter string="Notice Type" name="group_type" context="{'group_by': 'notice_type'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_rental_notice_template" model="ir.actions.act_window">
+        <field name="name">Notice Templates</field>
+        <field name="res_model">rental.notice.template</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_rental_notice_template_search"/>
+    </record>
+
+    <record id="view_rental_notice_list" model="ir.ui.view">
+        <field name="name">rental.notice.list</field>
+        <field name="model">rental.notice</field>
+        <field name="arch" type="xml">
+            <list string="Tenant Notices" decoration-muted="state == 'cancelled'" decoration-warning="state == 'approved'" decoration-success="state == 'delivered'" decoration-danger="notice_type == 'eviction' and state not in ('delivered', 'cancelled')">
+                <field name="name"/>
+                <field name="notice_date"/>
+                <field name="notice_type"/>
+                <field name="ground"/>
+                <field name="contract_id"/>
+                <field name="partner_id"/>
+                <field name="unit_id" optional="show"/>
+                <field name="amount_due" sum="Amount Due" optional="show"/>
+                <field name="currency_id" column_invisible="True"/>
+                <field name="response_deadline" optional="show"/>
+                <field name="delivery_method" optional="hide"/>
+                <field name="state" widget="badge" decoration-warning="state == 'approved'" decoration-info="state == 'issued'" decoration-success="state == 'delivered'" decoration-danger="state == 'cancelled'"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_rental_notice_form" model="ir.ui.view">
+        <field name="name">rental.notice.form</field>
+        <field name="model">rental.notice</field>
+        <field name="arch" type="xml">
+            <form string="Tenant Notice">
+                <header>
+                    <button name="action_approve" string="Review and Freeze" type="object" class="oe_highlight" invisible="state != 'draft'" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_issue" string="Issue Notice" type="object" class="oe_highlight" invisible="state != 'approved'" confirm="Issue this reviewed notice? Email delivery will send it immediately." groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_mark_delivered" string="Mark Delivered" type="object" class="btn-secondary" invisible="state != 'issued'" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_reset_to_draft" string="Reset to Draft" type="object" invisible="state != 'approved'" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_cancel" string="Cancel" type="object" invisible="state in ('delivered', 'cancelled')" confirm="Cancel this notice record?" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_preview_pdf" string="Print / Preview" type="object" invisible="state == 'draft'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,approved,issued,delivered"/>
+                </header>
+                <sheet>
+                    <widget name="web_ribbon" title="Cancelled" bg_color="text-bg-danger" invisible="state != 'cancelled'"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <div class="alert alert-warning" role="alert" invisible="notice_type != 'eviction' or state not in ('draft', 'approved')">
+                        Eviction rules, service methods, cure periods, prohibited grounds, and court requirements vary by jurisdiction. Obtain local legal review before issuance.
+                    </div>
+                    <group>
+                        <group string="Notice">
+                            <field name="notice_type" readonly="state != 'draft'"/>
+                            <field name="template_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="template_name" invisible="not template_name"/>
+                            <field name="template_version" invisible="not template_version"/>
+                            <field name="ground" readonly="state != 'draft'"/>
+                            <field name="grounds_description" readonly="state != 'draft'"/>
+                        </group>
+                        <group string="Tenant and Contract">
+                            <field name="contract_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="partner_id" readonly="1"/>
+                            <field name="unit_id" readonly="1"/>
+                            <field name="company_id" groups="base.group_multi_company" readonly="1"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Timing and Amount">
+                            <field name="notice_date" readonly="state != 'draft'"/>
+                            <field name="response_deadline" readonly="state != 'draft'"/>
+                            <field name="amount_due" readonly="1"/>
+                            <field name="consecutive_missed_payments" readonly="1"/>
+                        </group>
+                        <group string="Review and Issuance">
+                            <field name="reviewed_by_id" widget="many2one_avatar_user" invisible="not reviewed_on"/>
+                            <field name="reviewed_on" invisible="not reviewed_on"/>
+                            <field name="issued_by_id" widget="many2one_avatar_user" invisible="not issued_on"/>
+                            <field name="issued_on" invisible="not issued_on"/>
+                            <field name="document_attachment_id" invisible="not document_attachment_id"/>
+                            <field name="document_hash" invisible="not document_hash" groups="apartment_rental_management.group_rental_manager"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Overdue Rent" invisible="ground not in ('nonpayment', 'repeated_nonpayment')">
+                            <field name="source_invoice_ids" readonly="state != 'draft'">
+                                <list>
+                                    <field name="name"/>
+                                    <field name="invoice_date"/>
+                                    <field name="invoice_date_due"/>
+                                    <field name="amount_total"/>
+                                    <field name="amount_residual"/>
+                                    <field name="payment_state" widget="badge"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Contract Violations" invisible="ground != 'contract_violation'">
+                            <field name="violation_ids" readonly="state != 'draft'">
+                                <list>
+                                    <field name="incident_date"/>
+                                    <field name="name"/>
+                                    <field name="clause_reference"/>
+                                    <field name="severity"/>
+                                    <field name="state" widget="badge"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Frozen Notice Content" invisible="state == 'draft'">
+                            <field name="subject" readonly="1"/>
+                            <field name="body_html" readonly="1"/>
+                        </page>
+                        <page string="Delivery">
+                            <group>
+                                <group>
+                                    <field name="delivery_method" readonly="state in ('delivered', 'cancelled')"/>
+                                    <field name="delivery_reference"/>
+                                    <field name="delivery_notes"/>
+                                </group>
+                                <group>
+                                    <field name="delivered_by_id" widget="many2one_avatar_user" invisible="not delivered_on"/>
+                                    <field name="delivered_on" invisible="not delivered_on"/>
+                                    <field name="delivery_proof_filename" invisible="1"/>
+                                    <field name="delivery_proof" filename="delivery_proof_filename"/>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Eligibility Audit" groups="apartment_rental_management.group_rental_manager" invisible="not eligibility_snapshot">
+                            <field name="eligibility_snapshot" readonly="1" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_rental_notice_search" model="ir.ui.view">
+        <field name="name">rental.notice.search</field>
+        <field name="model">rental.notice</field>
+        <field name="arch" type="xml">
+            <search string="Tenant Notices">
+                <field name="name"/>
+                <field name="contract_id"/>
+                <field name="partner_id"/>
+                <field name="unit_id"/>
+                <filter string="Late-Payment Letters" name="late" domain="[('notice_type', '=', 'late_payment')]"/>
+                <filter string="Eviction Notices" name="eviction" domain="[('notice_type', '=', 'eviction')]"/>
+                <filter string="Needs Review" name="draft" domain="[('state', '=', 'draft')]"/>
+                <filter string="Issued, Not Delivered" name="issued" domain="[('state', '=', 'issued')]"/>
+                <separator/>
+                <filter string="Notice Type" name="group_type" context="{'group_by': 'notice_type'}"/>
+                <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                <filter string="Tenant" name="group_tenant" context="{'group_by': 'partner_id'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_rental_notice" model="ir.actions.act_window">
+        <field name="name">Tenant Notices</field>
+        <field name="res_model">rental.notice</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_rental_notice_search"/>
+    </record>
+
+    <record id="view_rental_contract_violation_list" model="ir.ui.view">
+        <field name="name">rental.contract.violation.list</field>
+        <field name="model">rental.contract.violation</field>
+        <field name="arch" type="xml">
+            <list string="Contract Violations" decoration-muted="state in ('cured', 'dismissed')" decoration-danger="state == 'escalated'">
+                <field name="incident_date"/>
+                <field name="name"/>
+                <field name="contract_id"/>
+                <field name="partner_id"/>
+                <field name="clause_reference"/>
+                <field name="severity"/>
+                <field name="state" widget="badge" decoration-warning="state == 'open'" decoration-danger="state == 'escalated'" decoration-success="state == 'cured'"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_rental_contract_violation_form" model="ir.ui.view">
+        <field name="name">rental.contract.violation.form</field>
+        <field name="model">rental.contract.violation</field>
+        <field name="arch" type="xml">
+            <form string="Contract Violation">
+                <header>
+                    <button name="action_escalate" string="Escalate" type="object" class="oe_highlight" invisible="state != 'open'" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_mark_cured" string="Mark Cured" type="object" invisible="state not in ('open', 'escalated')" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_dismiss" string="Dismiss" type="object" invisible="state not in ('open', 'escalated')" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_reopen" string="Reopen" type="object" invisible="state not in ('cured', 'dismissed')" groups="apartment_rental_management.group_rental_manager"/>
+                    <field name="state" widget="statusbar" statusbar_visible="open,escalated,cured,dismissed"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="e.g. Unauthorized subletting"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="contract_id" readonly="state not in ('open', 'escalated')" options="{'no_create': True}"/>
+                            <field name="partner_id" readonly="1"/>
+                            <field name="incident_date" readonly="state not in ('open', 'escalated')"/>
+                            <field name="severity" readonly="state not in ('open', 'escalated')"/>
+                            <field name="company_id" groups="base.group_multi_company" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="clause_reference" readonly="state not in ('open', 'escalated')"/>
+                            <field name="reported_by_id" widget="many2one_avatar_user"/>
+                            <field name="reported_on"/>
+                        </group>
+                    </group>
+                    <group string="Incident"><field name="description" readonly="state not in ('open', 'escalated')"/></group>
+                    <group string="Resolution"><field name="resolution_notes"/></group>
+                    <field name="notice_ids" widget="many2many_tags" readonly="1"/>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_rental_contract_violation_search" model="ir.ui.view">
+        <field name="name">rental.contract.violation.search</field>
+        <field name="model">rental.contract.violation</field>
+        <field name="arch" type="xml">
+            <search string="Contract Violations">
+                <field name="name"/>
+                <field name="contract_id"/>
+                <field name="partner_id"/>
+                <field name="clause_reference"/>
+                <filter string="Unresolved" name="unresolved" domain="[('state', 'in', ('open', 'escalated'))]"/>
+                <filter string="Escalated" name="escalated" domain="[('state', '=', 'escalated')]"/>
+                <separator/>
+                <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                <filter string="Contract" name="group_contract" context="{'group_by': 'contract_id'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_rental_contract_violation" model="ir.actions.act_window">
+        <field name="name">Contract Violations</field>
+        <field name="res_model">rental.contract.violation</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_rental_contract_violation_search"/>
+    </record>
+</odoo>

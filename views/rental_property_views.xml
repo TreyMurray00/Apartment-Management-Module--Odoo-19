@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_rental_property_list" model="ir.ui.view">
+        <field name="name">rental.property.list</field>
+        <field name="model">rental.property</field>
+        <field name="arch" type="xml">
+            <list string="Properties" decoration-muted="not active">
+                <field name="code"/>
+                <field name="name"/>
+                <field name="city"/>
+                <field name="manager_id" widget="many2one_avatar_user"/>
+                <field name="unit_count"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="active" column_invisible="True"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_rental_property_form" model="ir.ui.view">
+        <field name="name">rental.property.form</field>
+        <field name="model">rental.property</field>
+        <field name="arch" type="xml">
+            <form string="Property">
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_units" type="object" class="oe_stat_button" icon="fa-building">
+                            <field name="unit_count" widget="statinfo" string="Units"/>
+                        </button>
+                    </div>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="e.g. Sunset Residences"/></h1>
+                        <field name="code" placeholder="Property code" class="oe_inline"/>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="manager_id" widget="many2one_avatar_user"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="active" invisible="1"/>
+                        </group>
+                        <group string="Address">
+                            <field name="street" placeholder="Street..."/>
+                            <field name="street2"/>
+                            <field name="city"/>
+                            <field name="state_id" options="{'no_open': True}"/>
+                            <field name="zip"/>
+                            <field name="country_id" options="{'no_open': True}"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Units">
+                            <field name="unit_ids" context="{'default_property_id': id}">
+                                <list editable="bottom">
+                                    <field name="name"/>
+                                    <field name="unit_type"/>
+                                    <field name="bedrooms"/>
+                                    <field name="bathrooms"/>
+                                    <field name="furnished"/>
+                                    <field name="short_term_rate"/>
+                                    <field name="long_term_rate"/>
+                                    <field name="occupancy_state" widget="badge" decoration-success="occupancy_state == 'available'" decoration-danger="occupancy_state == 'occupied'"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Notes"><field name="notes"/></page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_rental_property_search" model="ir.ui.view">
+        <field name="name">rental.property.search</field>
+        <field name="model">rental.property</field>
+        <field name="arch" type="xml">
+            <search string="Properties">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="city"/>
+                <field name="manager_id"/>
+                <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
+                <separator/>
+                <filter string="Manager" name="group_manager" context="{'group_by': 'manager_id'}"/>
+                <filter string="City" name="group_city" context="{'group_by': 'city'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_rental_property" model="ir.actions.act_window">
+        <field name="name">Properties</field>
+        <field name="res_model">rental.property</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_rental_property_search"/>
+    </record>
+</odoo>

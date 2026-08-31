@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="portal_my_home_rental" name="Rental portal entry" inherit_id="portal.portal_my_home" customize_show="True" priority="30">
+        <xpath expr="//div[hasclass('o_portal_docs')]" position="before">
+            <t t-set="portal_service_category_enable" t-value="True"/>
+        </xpath>
+        <xpath expr="//div[@id='portal_service_category']" position="inside">
+            <t t-call="portal.portal_docs_entry">
+                <t t-set="title">Rental Applications</t>
+                <t t-set="text">Upload and track prospective tenant documents</t>
+                <t t-set="url" t-value="'/my/rental-applications'"/>
+                <t t-set="placeholder_count" t-value="'rental_application_count'"/>
+            </t>
+            <t t-call="portal.portal_docs_entry">
+                <t t-set="title">Rental Contracts</t>
+                <t t-set="text">Review contracts, billing schedules, signatures and invoices</t>
+                <t t-set="url" t-value="'/my/rental-contracts'"/>
+                <t t-set="placeholder_count" t-value="'rental_contract_count'"/>
+            </t>
+        </xpath>
+    </template>
+
+    <template id="portal_breadcrumbs_rental" name="Rental breadcrumbs" inherit_id="portal.portal_breadcrumbs" priority="30">
+        <xpath expr="//ol[hasclass('o_portal_submenu')]" position="inside">
+            <li t-if="page_name in ('rental_applications', 'rental_application')" t-attf-class="breadcrumb-item #{'active' if page_name == 'rental_applications' else ''}">
+                <a t-if="page_name == 'rental_application'" href="/my/rental-applications">Rental Applications</a>
+                <t t-else="">Rental Applications</t>
+            </li>
+            <li t-if="page_name == 'rental_application'" class="breadcrumb-item active"><span t-field="application.name"/></li>
+            <li t-if="page_name in ('rental_contracts', 'rental_contract')" t-attf-class="breadcrumb-item #{'active' if page_name == 'rental_contracts' else ''}">
+                <a t-if="page_name == 'rental_contract'" href="/my/rental-contracts">Rental Contracts</a>
+                <t t-else="">Rental Contracts</t>
+            </li>
+            <li t-if="page_name == 'rental_contract'" class="breadcrumb-item active"><span t-field="contract.name"/></li>
+        </xpath>
+    </template>
+
+    <template id="portal_my_rental_applications" name="My Rental Applications">
+        <t t-call="portal.portal_layout">
+            <t t-set="breadcrumbs_searchbar" t-value="True"/>
+            <t t-call="portal.portal_searchbar"><t t-set="title">Rental Applications</t></t>
+            <div t-if="not applications" class="alert alert-warning">There are no rental applications for your account.</div>
+            <t t-if="applications" t-call="portal.portal_table">
+                <thead><tr><th>Application</th><th>Requested Unit</th><th>Requested Period</th><th>Documents</th><th>Status</th></tr></thead>
+                <tbody><tr t-foreach="applications" t-as="application">
+                    <td><a t-att-href="application.get_portal_url()"><span t-field="application.name"/></a></td>
+                    <td><span t-field="application.unit_id"/></td>
+                    <td><span t-field="application.requested_date_start"/> – <span t-field="application.requested_date_end"/></td>
+                    <td><span t-if="application.document_complete" class="text-success">Complete</span><span t-else="" class="text-warning">Incomplete</span></td>
+                    <td><span class="badge text-bg-secondary" t-field="application.state"/></td>
+                </tr></tbody>
+            </t>
+        </t>
+    </template>
+
+    <template id="portal_rental_application_page" name="Rental Application Documents">
+        <t t-call="portal.portal_layout">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                <div><h2 class="mb-0"><span t-field="application.name"/></h2><span class="text-muted" t-field="application.partner_id"/></div>
+                <span class="badge text-bg-primary" t-field="application.state"/>
+            </div>
+            <div t-if="message == 'upload_ok'" class="alert alert-success">Your document was uploaded securely and is awaiting review.</div>
+            <div t-if="message == 'missing_file'" class="alert alert-danger">Select a requirement and a document file.</div>
+            <div t-if="message == 'file_too_large'" class="alert alert-danger">The file exceeds the 10 MB limit.</div>
+            <div t-if="message == 'already_submitted'" class="alert alert-warning">That requirement already has a pending or verified document.</div>
+            <div t-if="message == 'invalid_file'" class="alert alert-danger">The file was rejected. Upload a genuine PDF, JPG, JPEG, or PNG file.</div>
+            <div t-if="message == 'closed'" class="alert alert-warning">This application is closed and no longer accepts documents.</div>
+            <div class="card mb-4">
+                <div class="card-header"><strong>Required Documents</strong></div>
+                <div class="table-responsive"><table class="table table-hover mb-0">
+                    <thead><tr><th>Requirement</th><th>File</th><th>Issue Date</th><th>Expiry Date</th><th>Status</th><th>Review Note</th></tr></thead>
+                    <tbody><tr t-foreach="application.document_ids" t-as="document">
+                        <td><span t-field="document.document_type"/></td>
+                        <td>
+                            <span t-field="document.filename"/>
+                            <div class="btn-group btn-group-sm ms-2" role="group">
+                                <a class="btn btn-outline-primary" target="_blank" t-att-href="application.get_portal_url(suffix='/documents/%s' % document.id, query_string='&amp;preview=true')"><i class="fa fa-eye"/> Preview</a>
+                                <a class="btn btn-outline-secondary" t-att-href="application.get_portal_url(suffix='/documents/%s' % document.id, query_string='&amp;download=true')"><i class="fa fa-download"/> Download</a>
+                            </div>
+                        </td>
+                        <td><span t-field="document.issue_date"/></td>
+                        <td><span t-field="document.expiration_date"/></td>
+                        <td><span class="badge text-bg-secondary" t-field="document.state"/></td>
+                        <td><span t-field="document.rejection_reason"/></td>
+                    </tr></tbody>
+                </table></div>
+            </div>
+            <div t-if="not application.document_complete" class="alert alert-info">
+                Still required: <strong t-field="application.missing_document_labels"/>.
+            </div>
+            <div t-if="application.state in ('draft', 'awaiting_documents', 'submitted', 'under_review')" class="card mb-4">
+                <div class="card-header"><strong>Upload or Replace a Rejected Document</strong></div>
+                <div class="card-body">
+                    <form t-att-action="application.get_portal_url(suffix='/upload')" method="post" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                        <div class="row g-3">
+                            <div class="col-md-6"><label class="form-label">Document requirement</label><select name="document_type" class="form-select" required="required">
+                                <option value="">Select…</option>
+                                <option value="employment_letter">Employment / Job Letter</option>
+                                <option value="character_certificate">Certificate of Character</option>
+                                <option value="primary_id">Primary Identification</option>
+                                <option value="secondary_id">Secondary Identification</option>
+                            </select></div>
+                            <div class="col-md-6"><label class="form-label">PDF, JPG, JPEG, or PNG (maximum 10 MB)</label><input type="file" name="document" class="form-control" accept=".pdf,.jpg,.jpeg,.png" required="required"/></div>
+                            <div class="col-md-4"><label class="form-label">Issue date (optional)</label><input type="date" name="issue_date" class="form-control"/></div>
+                            <div class="col-md-4"><label class="form-label">Expiration date (optional)</label><input type="date" name="expiration_date" class="form-control"/></div>
+                            <div class="col-md-4 d-flex align-items-end"><button type="submit" class="btn btn-primary w-100"><i class="fa fa-upload me-1"/> Upload Securely</button></div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div t-if="application.state == 'rejected' and application.rejection_reason" class="alert alert-danger"><strong>Application decision:</strong> <span t-field="application.rejection_reason"/></div>
+            <hr/><div id="rental_application_communication"><h3>Communication history</h3><t t-call="portal.message_thread"/></div>
+        </t>
+    </template>
+
+    <template id="portal_my_rental_contracts" name="My Rental Contracts">
+        <t t-call="portal.portal_layout">
+            <t t-set="breadcrumbs_searchbar" t-value="True"/>
+            <t t-call="portal.portal_searchbar"><t t-set="title">Rental Contracts</t></t>
+            <div t-if="not contracts" class="alert alert-warning">There are no rental contracts for your account.</div>
+            <t t-if="contracts" t-call="portal.portal_table">
+                <thead><tr><th>Contract</th><th>Unit</th><th>Period</th><th class="text-end">Rent</th><th class="text-center">Status</th></tr></thead>
+                <tbody>
+                    <tr t-foreach="contracts" t-as="contract">
+                        <td><a t-att-href="contract.get_portal_url()"><span t-field="contract.name"/></a></td>
+                        <td><span t-field="contract.unit_id"/></td>
+                        <td><span t-field="contract.date_start"/> – <span t-field="contract.date_end"/></td>
+                        <td class="text-end"><span t-field="contract.rent_amount"/></td>
+                        <td class="text-center"><span class="badge rounded-pill text-bg-secondary" t-field="contract.state"/></td>
+                    </tr>
+                </tbody>
+            </t>
+        </t>
+    </template>
+
+    <template id="portal_rental_contract_page" name="Rental Contract">
+        <t t-call="portal.portal_layout">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                <div><h2 class="mb-0"><span t-field="contract.name"/></h2><span class="text-muted" t-field="contract.unit_id"/></div>
+                <div class="d-print-none">
+                    <a class="btn btn-outline-secondary" t-att-href="contract.get_portal_url(report_type='pdf', download=True)"><i class="fa fa-download me-1"/> Download PDF</a>
+                    <button t-if="contract.state == 'sent' and not contract.tenant_signature" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#rentalSignModal"><i class="fa fa-pencil me-1"/> Review and Sign</button>
+                </div>
+            </div>
+            <div t-if="message == 'sign_ok'" class="alert alert-success">Thank you. Your signature has been recorded and a signed PDF was archived.</div>
+            <div class="row g-3 mb-4">
+                <div class="col-md-4"><div class="card h-100"><div class="card-body"><small class="text-muted">Rental Period</small><div><span t-field="contract.date_start"/> – <span t-field="contract.date_end"/></div></div></div></div>
+                <div class="col-md-4"><div class="card h-100"><div class="card-body"><small class="text-muted">Rent</small><div><strong t-field="contract.rent_amount"/></div><span t-field="contract.billing_frequency"/></div></div></div>
+                <div class="col-md-4"><div class="card h-100"><div class="card-body"><small class="text-muted">Status</small><div><span class="badge text-bg-primary" t-field="contract.state"/></div></div></div></div>
+            </div>
+            <div class="card mb-4"><div class="card-header"><strong>Billing Schedule</strong></div><div class="table-responsive">
+                <table class="table table-hover mb-0"><thead><tr><th>Period</th><th>Invoice Date</th><th class="text-end">Amount</th><th>Status</th><th>Invoice</th></tr></thead><tbody>
+                    <tr t-foreach="contract.billing_line_ids.filtered(lambda l: l.state != 'cancelled')" t-as="line">
+                        <td><span t-field="line.date_from"/> – <span t-field="line.date_to"/></td><td><span t-field="line.invoice_date"/></td><td class="text-end"><span t-field="line.amount"/></td><td><span t-field="line.state"/></td>
+                        <td><a t-if="line.move_id" t-att-href="line.move_id.get_portal_url()"><span t-field="line.move_id.name"/></a><span t-else="">—</span></td>
+                    </tr>
+                </tbody></table>
+            </div></div>
+            <div t-if="contract.charge_ids.filtered(lambda c: c.state != 'cancelled')" class="card mb-4">
+                <div class="card-header"><strong>Utilities and Other Tenant Charges</strong></div>
+                <div class="table-responsive"><table class="table table-hover mb-0">
+                    <thead><tr><th>Date</th><th>Charge</th><th>Category</th><th class="text-end">Usage / Qty.</th><th class="text-end">Amount</th><th>Status</th><th>Invoice</th></tr></thead>
+                    <tbody><tr t-foreach="contract.charge_ids.filtered(lambda c: c.state != 'cancelled')" t-as="charge">
+                        <td><span t-field="charge.service_date"/></td>
+                        <td><span t-field="charge.name"/></td>
+                        <td><span t-field="charge.category"/></td>
+                        <td class="text-end"><span t-field="charge.quantity"/></td>
+                        <td class="text-end"><span t-field="charge.amount"/></td>
+                        <td><span t-field="charge.state"/></td>
+                        <td><a t-if="charge.move_id" t-att-href="charge.move_id.get_portal_url()"><span t-field="charge.move_id.name"/></a><span t-else="">—</span></td>
+                    </tr></tbody>
+                </table></div>
+            </div>
+            <div class="card mb-4"><div class="card-header"><strong>Terms and Conditions</strong></div><div class="card-body" t-field="contract.terms"/></div>
+            <div t-if="contract.tenant_signature" class="row mb-4"><div class="col-md-6 ms-auto text-center"><h5>Tenant Signature</h5><img t-att-src="image_data_uri(contract.tenant_signature)" style="max-height: 100px; max-width: 100%;"/><div t-field="contract.tenant_signed_by"/><small class="text-muted" t-field="contract.tenant_signed_on"/></div></div>
+            <hr/><div id="rental_contract_communication"><h3>Communication history</h3><t t-call="portal.message_thread"/></div>
+
+            <div t-if="contract.state == 'sent' and not contract.tenant_signature" class="modal fade" id="rentalSignModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog"><form class="modal-content js_website_submit_form">
+                    <header class="modal-header"><h4 class="modal-title">Sign Rental Contract</h4><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"/></header>
+                    <main class="modal-body" id="sign-dialog">
+                        <p>By signing, you confirm that you have reviewed and accept this rental agreement on behalf of <strong t-field="contract.partner_id.commercial_partner_id"/>.</p>
+                        <t t-call="portal.signature_form">
+                            <t t-set="call_url" t-value="contract.get_portal_url(suffix='/accept')"/>
+                            <t t-set="default_name" t-value="contract.partner_id.name or contract.partner_id.commercial_partner_id.name"/>
+                            <t t-set="send_label">Accept and Sign</t>
+                        </t>
+                    </main>
+                </form></div>
+            </div>
+        </t>
+    </template>
+</odoo>

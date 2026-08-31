@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_rental_root" name="Rentals" sequence="35" groups="apartment_rental_management.group_rental_user"/>
+    <menuitem id="menu_rental_operations" name="Operations" parent="menu_rental_root" sequence="10"/>
+    <menuitem id="menu_rental_applications" name="Tenant Applications" parent="menu_rental_operations" action="action_rental_application" sequence="5"/>
+    <menuitem id="menu_rental_contract" name="Contracts" parent="menu_rental_operations" action="action_rental_contract" sequence="10"/>
+    <menuitem id="menu_rental_calendar" name="Rental Calendar" parent="menu_rental_operations" action="action_rental_contract_calendar" sequence="20"/>
+    <menuitem id="menu_rental_charges" name="Tenant Charges" parent="menu_rental_operations" action="action_rental_charge" sequence="30"/>
+    <menuitem id="menu_rental_notices" name="Tenant Notices" parent="menu_rental_operations" action="action_rental_notice" sequence="40"/>
+    <menuitem id="menu_rental_violations" name="Contract Violations" parent="menu_rental_operations" action="action_rental_contract_violation" sequence="50"/>
+    <menuitem id="menu_rental_properties" name="Properties" parent="menu_rental_root" sequence="20"/>
+    <menuitem id="menu_rental_property" name="Properties" parent="menu_rental_properties" action="action_rental_property" sequence="10"/>
+    <menuitem id="menu_rental_unit" name="Units" parent="menu_rental_properties" action="action_rental_unit" sequence="20"/>
+    <menuitem id="menu_rental_reporting" name="Accounting" parent="menu_rental_root" sequence="30" groups="apartment_rental_management.group_rental_manager"/>
+    <menuitem id="menu_rental_invoices" name="Rental Invoices" parent="menu_rental_reporting" action="action_rental_invoices" sequence="10" groups="apartment_rental_management.group_rental_manager"/>
+    <menuitem id="menu_rental_configuration" name="Configuration" parent="menu_rental_root" sequence="40" groups="apartment_rental_management.group_rental_manager"/>
+    <menuitem id="menu_rental_contract_templates" name="Contract Templates" parent="menu_rental_configuration" action="action_rental_contract_template" sequence="10"/>
+    <menuitem id="menu_rental_notice_templates" name="Notice Templates" parent="menu_rental_configuration" action="action_rental_notice_template" sequence="20"/>
+</odoo>

@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_rental_application_list" model="ir.ui.view">
+        <field name="name">rental.application.list</field>
+        <field name="model">rental.application</field>
+        <field name="arch" type="xml">
+            <list string="Prospective Tenant Applications" decoration-success="state == 'approved'" decoration-danger="state == 'rejected'" decoration-muted="state == 'cancelled'">
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="unit_id"/>
+                <field name="rental_type"/>
+                <field name="requested_date_start"/>
+                <field name="document_complete" optional="show"/>
+                <field name="all_documents_verified" optional="show"/>
+                <field name="state" widget="badge"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_rental_application_form" model="ir.ui.view">
+        <field name="name">rental.application.form</field>
+        <field name="model">rental.application</field>
+        <field name="arch" type="xml">
+            <form string="Prospective Tenant Application">
+                <header>
+                    <button name="action_request_documents" string="Request Documents" type="object" class="oe_highlight" invisible="state not in ('draft', 'awaiting_documents', 'submitted')"/>
+                    <button name="action_start_review" string="Start Review" type="object" invisible="state not in ('awaiting_documents', 'submitted')" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_approve" string="Approve" type="object" class="oe_highlight" invisible="state not in ('submitted', 'under_review')" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_reject" string="Reject" type="object" invisible="state not in ('submitted', 'under_review')" groups="apartment_rental_management.group_rental_manager" confirm="Reject this prospective tenant application?"/>
+                    <button name="action_create_contract" string="Create Rental Contract" type="object" class="oe_highlight" invisible="state != 'approved' or contract_count" groups="apartment_rental_management.group_rental_manager"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,awaiting_documents,submitted,under_review,approved,rejected"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_create_contract" type="object" class="oe_stat_button" icon="fa-file-text-o" invisible="not contract_count" groups="apartment_rental_management.group_rental_manager">
+                            <field name="contract_count" widget="statinfo" string="Contract"/>
+                        </button>
+                    </div>
+                    <widget name="web_ribbon" title="Approved" bg_color="text-bg-success" invisible="state != 'approved'"/>
+                    <widget name="web_ribbon" title="Rejected" bg_color="text-bg-danger" invisible="state != 'rejected'"/>
+                    <div class="oe_title"><label for="name"/><h1><field name="name"/></h1></div>
+                    <group>
+                        <group string="Applicant">
+                            <field name="partner_id" readonly="state in ('approved', 'rejected', 'cancelled')" context="{'res_partner_search_mode': 'customer'}"/>
+                            <field name="company_id" groups="base.group_multi_company" readonly="state != 'draft'"/>
+                            <field name="document_complete" readonly="1"/>
+                            <field name="all_documents_verified" readonly="1"/>
+                            <field name="missing_document_labels" readonly="1" invisible="document_complete"/>
+                        </group>
+                        <group string="Requested Rental">
+                            <field name="unit_id" readonly="state in ('approved', 'rejected', 'cancelled')" options="{'no_create': True}"/>
+                            <field name="rental_type" readonly="state in ('approved', 'rejected', 'cancelled')"/>
+                            <field name="requested_date_start" readonly="state in ('approved', 'rejected', 'cancelled')"/>
+                            <field name="requested_date_end" readonly="state in ('approved', 'rejected', 'cancelled')"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Applicant Documents" groups="apartment_rental_management.group_rental_manager">
+                            <div class="alert alert-info" role="alert">Required: employment/job letter, certificate of character, primary ID, and a distinct secondary ID. Verify each file only after reviewing its authenticity and expiry.</div>
+                            <field name="document_ids">
+                                <list decoration-success="state == 'verified'" decoration-danger="state == 'rejected'">
+                                    <field name="document_type"/>
+                                    <field name="name"/>
+                                    <field name="filename"/>
+                                    <field name="issue_date" optional="show"/>
+                                    <field name="expiration_date" optional="show"/>
+                                    <field name="state" widget="badge"/>
+                                    <field name="verified_by_id" optional="show"/>
+                                    <field name="verified_on" optional="hide"/>
+                                    <button name="action_preview" string="Preview" type="object" icon="fa-eye"/>
+                                    <button name="action_verify" string="Verify" type="object" icon="fa-check" invisible="state == 'verified'"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Review Notes">
+                            <field name="notes" readonly="state in ('approved', 'rejected', 'cancelled')"/>
+                            <field name="rejection_reason" placeholder="Required before rejecting the application" readonly="state in ('approved', 'rejected', 'cancelled')"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_rental_application_document_form" model="ir.ui.view">
+        <field name="name">rental.application.document.form</field>
+        <field name="model">rental.application.document</field>
+        <field name="arch" type="xml">
+            <form string="Applicant Document">
+                <header>
+                    <button name="action_preview" string="Preview" type="object" class="btn-secondary"/>
+                    <button name="action_verify" string="Verify" type="object" class="oe_highlight" invisible="state == 'verified'"/>
+                    <button name="action_reject" string="Reject" type="object" invisible="state == 'rejected'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="pending,verified,rejected"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="application_id" readonly="state == 'verified'"/>
+                            <field name="document_type" readonly="state == 'verified'"/>
+                            <field name="name" readonly="state == 'verified'"/>
+                            <field name="filename" invisible="1"/>
+                            <field name="file" filename="filename" readonly="state == 'verified'"/>
+                        </group>
+                        <group>
+                            <field name="issue_date" readonly="state == 'verified'"/>
+                            <field name="expiration_date" readonly="state == 'verified'"/>
+                            <field name="verified_by_id" readonly="1"/>
+                            <field name="verified_on" readonly="1"/>
+                            <field name="checksum" readonly="1" groups="base.group_system"/>
+                        </group>
+                    </group>
+                    <field name="rejection_reason" placeholder="Required before rejecting this document" readonly="state == 'verified'"/>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_rental_application_search" model="ir.ui.view">
+        <field name="name">rental.application.search</field>
+        <field name="model">rental.application</field>
+        <field name="arch" type="xml">
+            <search string="Prospective Tenant Applications">
+                <field name="name"/><field name="partner_id"/><field name="unit_id"/>
+                <filter string="Awaiting Documents" name="awaiting" domain="[('state', '=', 'awaiting_documents')]"/>
+                <filter string="Ready for Review" name="ready" domain="[('document_complete', '=', True), ('state', 'in', ('submitted', 'under_review'))]"/>
+                <filter string="Approved" name="approved" domain="[('state', '=', 'approved')]"/>
+                <separator/>
+                <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                <filter string="Requested Unit" name="group_unit" context="{'group_by': 'unit_id'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_rental_application" model="ir.actions.act_window">
+        <field name="name">Tenant Applications</field>
+        <field name="res_model">rental.application</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_rental_application_search"/>
+    </record>
+</odoo>

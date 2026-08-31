@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_rental_contract_list" model="ir.ui.view">
+        <field name="name">rental.contract.list</field>
+        <field name="model">rental.contract</field>
+        <field name="arch" type="xml">
+            <list string="Rental Contracts" decoration-muted="state in ('ended', 'cancelled')" decoration-success="state == 'active'" decoration-info="state == 'signed'">
+                <field name="name"/>
+                <field name="template_id" optional="hide"/>
+                <field name="unit_id"/>
+                <field name="partner_id"/>
+                <field name="rental_type"/>
+                <field name="date_start"/>
+                <field name="date_end"/>
+                <field name="billing_frequency" optional="show"/>
+                <field name="rent_amount" sum="Rent"/>
+                <field name="currency_id" column_invisible="True"/>
+                <field name="manager_id" widget="many2one_avatar_user" optional="hide"/>
+                <field name="state" widget="badge" decoration-info="state == 'sent'" decoration-primary="state == 'signed'" decoration-success="state == 'active'" decoration-danger="state == 'cancelled'"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_rental_contract_form" model="ir.ui.view">
+        <field name="name">rental.contract.form</field>
+        <field name="model">rental.contract</field>
+        <field name="arch" type="xml">
+            <form string="Rental Contract">
+                <header>
+                    <button name="action_confirm" string="Confirm" type="object" class="oe_highlight" invisible="state != 'draft'"/>
+                    <button name="action_send_for_signature" string="Send for Signature" type="object" class="oe_highlight" invisible="state not in ('draft', 'sent')"/>
+                    <button name="action_manager_sign" string="Record Manager Signature" type="object" class="btn-secondary" invisible="state not in ('sent', 'signed') or manager_signed_on" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_activate" string="Activate" type="object" class="oe_highlight" invisible="state != 'signed'"/>
+                    <button name="action_create_due_invoices" string="Create Due Invoices" type="object" invisible="state not in ('signed', 'active', 'ended')" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_create_due_charges" string="Invoice Due Charges" type="object" invisible="state not in ('signed', 'active', 'ended')" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_create_deposit_invoice" string="Create Deposit Invoice" type="object" invisible="state not in ('signed', 'active') or not deposit_amount or deposit_invoice_id" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_prepare_late_notice" string="Prepare Late Letter" type="object" invisible="state != 'active' or not late_notice_template_id" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_prepare_eviction_notice" string="Prepare Eviction Notice" type="object" class="btn-secondary" invisible="state != 'active' or not eviction_notice_template_id" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_end" string="End Contract" type="object" invisible="state != 'active'" confirm="End this contract and cancel all pending schedule lines?"/>
+                    <button name="action_cancel" string="Cancel" type="object" invisible="state in ('ended', 'cancelled')" confirm="Cancel this contract and its pending schedule lines?"/>
+                    <button name="action_reset_to_draft" string="Reset to Draft" type="object" invisible="state != 'cancelled'" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="action_create_amendment" string="Create Amendment" type="object" invisible="state in ('draft', 'sent')" groups="apartment_rental_management.group_rental_manager"/>
+                    <button name="%(action_report_rental_contract)d" string="Print Contract" type="action" invisible="state == 'draft'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,sent,signed,active,ended"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <field name="deposit_invoice_id" invisible="1"/>
+                        <button name="action_view_invoices" type="object" class="oe_stat_button" icon="fa-money" groups="apartment_rental_management.group_rental_manager">
+                            <field name="invoice_count" widget="statinfo" string="Invoices"/>
+                        </button>
+                        <button name="action_view_charges" type="object" class="oe_stat_button" icon="fa-bolt">
+                            <field name="charge_count" widget="statinfo" string="Tenant Charges"/>
+                        </button>
+                        <button name="action_view_notices" type="object" class="oe_stat_button" icon="fa-envelope-o">
+                            <field name="notice_count" widget="statinfo" string="Notices"/>
+                        </button>
+                        <button name="action_view_violations" type="object" class="oe_stat_button" icon="fa-exclamation-triangle">
+                            <field name="violation_count" widget="statinfo" string="Violations"/>
+                        </button>
+                    </div>
+                    <widget name="web_ribbon" title="Cancelled" bg_color="text-bg-danger" invisible="state != 'cancelled'"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group string="Contract Template">
+                        <field name="template_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                        <field name="template_version" readonly="1" invisible="not template_id"/>
+                        <field name="amends_contract_id" readonly="1" invisible="not amends_contract_id"/>
+                        <button name="action_apply_template" string="Reapply Template" type="object" class="btn-secondary" invisible="state != 'draft' or not template_id"/>
+                    </group>
+                    <group>
+                        <group string="Parties and Unit">
+                            <field name="application_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="partner_id" readonly="state != 'draft'" context="{'res_partner_search_mode': 'customer'}"/>
+                            <field name="unit_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="property_id" readonly="1"/>
+                            <field name="manager_id" widget="many2one_avatar_user"/>
+                            <field name="company_id" groups="base.group_multi_company" readonly="state != 'draft'"/>
+                        </group>
+                        <group string="Rental Period">
+                            <field name="rental_type" readonly="state != 'draft'"/>
+                            <field name="date_start" readonly="state != 'draft'"/>
+                            <field name="date_end" readonly="state != 'draft'"/>
+                            <field name="billing_frequency" readonly="state != 'draft'"/>
+                            <field name="invoice_lead_days" readonly="state != 'draft'"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Pricing and Accounting">
+                            <field name="currency_id" invisible="1"/>
+                            <field name="rent_amount" readonly="state != 'draft'"/>
+                            <field name="deposit_amount" readonly="state != 'draft'"/>
+                            <field name="scheduled_rent_total" readonly="1"/>
+                            <field name="rent_product_id" readonly="state != 'draft'"/>
+                            <field name="deposit_product_id" readonly="state != 'draft'"/>
+                            <field name="payment_term_id" readonly="state != 'draft'"/>
+                        </group>
+                        <group string="Signature Policy">
+                            <field name="require_manager_signature" readonly="state != 'draft'"/>
+                            <field name="tenant_signed_by" invisible="not tenant_signed_on"/>
+                            <field name="tenant_signed_on" invisible="not tenant_signed_on"/>
+                            <field name="manager_signed_by" invisible="not manager_signed_on"/>
+                            <field name="manager_signed_on" invisible="not manager_signed_on"/>
+                        </group>
+                    </group>
+                    <group string="Late Fee Policy">
+                        <group>
+                            <field name="late_fee_enabled" readonly="state != 'draft'"/>
+                            <field name="late_fee_calculation" invisible="not late_fee_enabled" readonly="state != 'draft'"/>
+                            <field name="late_fee_grace_days" invisible="not late_fee_enabled" readonly="state != 'draft'"/>
+                        </group>
+                        <group>
+                            <field name="late_fee_amount" invisible="not late_fee_enabled or late_fee_calculation != 'fixed'" readonly="state != 'draft'"/>
+                            <field name="late_fee_percentage" invisible="not late_fee_enabled or late_fee_calculation != 'percent'" readonly="state != 'draft'"/>
+                            <field name="late_fee_product_id" invisible="not late_fee_enabled" readonly="state != 'draft'"/>
+                        </group>
+                    </group>
+                    <group string="Tenant Notice Policy">
+                        <group>
+                            <field name="payment_notice_grace_days" readonly="state != 'draft'"/>
+                            <field name="eviction_nonpayment_threshold" readonly="state != 'draft'"/>
+                            <field name="auto_prepare_late_notices" readonly="state not in ('draft', 'active')"/>
+                        </group>
+                        <group>
+                            <field name="late_notice_template_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                            <field name="eviction_notice_template_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Billing Schedule">
+                            <field name="billing_line_ids" readonly="state != 'draft'">
+                                <list editable="bottom" decoration-muted="state == 'cancelled'" decoration-success="state == 'invoiced'">
+                                    <field name="date_from"/>
+                                    <field name="date_to"/>
+                                    <field name="invoice_date"/>
+                                    <field name="amount" sum="Total"/>
+                                    <field name="currency_id" column_invisible="True"/>
+                                    <field name="state" widget="badge"/>
+                                    <field name="move_id"/>
+                                    <button name="action_create_invoice" string="Invoice" type="object" icon="fa-file-text-o" invisible="state != 'pending' or parent.state not in ('signed', 'active', 'ended')" groups="apartment_rental_management.group_rental_manager"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Utilities and Other Charges">
+                            <div class="alert alert-info" role="alert">
+                                Record separately billable utilities, damage, cleaning, replacements, miscellaneous tenant liabilities, and late fees. Metered charges use the difference between current and previous readings.
+                            </div>
+                            <field name="pending_charge_total" invisible="1"/>
+                            <field name="charge_ids" context="{'default_contract_id': id}">
+                                <list editable="bottom" decoration-muted="state == 'cancelled'" decoration-success="state == 'invoiced'">
+                                    <field name="invoice_date"/>
+                                    <field name="name"/>
+                                    <field name="category"/>
+                                    <field name="calculation_type"/>
+                                    <field name="product_id"/>
+                                    <field name="units" invisible="calculation_type != 'quantity'"/>
+                                    <field name="meter_previous" invisible="calculation_type != 'meter'"/>
+                                    <field name="meter_current" invisible="calculation_type != 'meter'"/>
+                                    <field name="quantity" readonly="1"/>
+                                    <field name="unit_price"/>
+                                    <field name="amount" sum="Total" readonly="1"/>
+                                    <field name="currency_id" column_invisible="True"/>
+                                    <field name="state" widget="badge" readonly="1"/>
+                                    <field name="move_id" readonly="1"/>
+                                    <button name="action_create_invoice" string="Invoice" type="object" icon="fa-file-text-o" invisible="state != 'pending'" groups="apartment_rental_management.group_rental_manager"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Contract Violations">
+                            <div class="alert alert-warning" role="alert">
+                                Record objective facts and identify the exact signed clause or rule. Attach supporting evidence in the violation's chatter. Cured or dismissed violations cannot support a new notice.
+                            </div>
+                            <field name="violation_ids" context="{'default_contract_id': id}">
+                                <list editable="bottom" decoration-muted="state in ('cured', 'dismissed')" decoration-danger="state == 'escalated'">
+                                    <field name="incident_date"/>
+                                    <field name="name"/>
+                                    <field name="clause_reference"/>
+                                    <field name="description"/>
+                                    <field name="severity"/>
+                                    <field name="state" widget="badge" readonly="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Tenant Notices">
+                            <field name="notice_ids" context="{'default_contract_id': id}">
+                                <list decoration-muted="state == 'cancelled'" decoration-success="state == 'delivered'" decoration-danger="notice_type == 'eviction' and state not in ('delivered', 'cancelled')">
+                                    <field name="name"/>
+                                    <field name="notice_date"/>
+                                    <field name="notice_type"/>
+                                    <field name="ground"/>
+                                    <field name="amount_due"/>
+                                    <field name="currency_id" column_invisible="True"/>
+                                    <field name="response_deadline"/>
+                                    <field name="state" widget="badge"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Terms and Conditions"><field name="terms" readonly="state != 'draft'"/></page>
+                        <page string="Signatures">
+                            <group>
+                                <group string="Tenant Signature">
+                                    <field name="tenant_signature" widget="image" readonly="1" class="oe_avatar"/>
+                                    <field name="tenant_signed_by"/>
+                                    <field name="tenant_signed_on"/>
+                                    <field name="tenant_sign_ip" groups="apartment_rental_management.group_rental_manager"/>
+                                    <field name="tenant_sign_user_agent" groups="apartment_rental_management.group_rental_manager"/>
+                                    <field name="tenant_signature_hash" groups="apartment_rental_management.group_rental_manager"/>
+                                </group>
+                                <group string="Manager Signature">
+                                    <field name="manager_signature" widget="signature" full_name="manager_id" readonly="manager_signed_on or state not in ('sent', 'signed')"/>
+                                    <field name="manager_signed_by"/>
+                                    <field name="manager_signed_on"/>
+                                    <field name="manager_signature_hash" groups="apartment_rental_management.group_rental_manager"/>
+                                    <field name="signed_document_hash" groups="apartment_rental_management.group_rental_manager"/>
+                                    <field name="final_document_hash" groups="apartment_rental_management.group_rental_manager"/>
+                                    <field name="final_document_attachment_id" groups="apartment_rental_management.group_rental_manager"/>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Termination" invisible="state not in ('ended', 'cancelled')">
+                            <group><field name="termination_date"/><field name="termination_reason"/></group>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_rental_contract_calendar" model="ir.ui.view">
+        <field name="name">rental.contract.calendar</field>
+        <field name="model">rental.contract</field>
+        <field name="arch" type="xml">
+            <calendar string="Rental Calendar" date_start="date_start" date_stop="date_end" color="unit_id" mode="month" quick_create="0">
+                <field name="name"/>
+                <field name="unit_id"/>
+                <field name="partner_id"/>
+                <field name="state" filters="1"/>
+            </calendar>
+        </field>
+    </record>
+
+    <record id="view_rental_contract_search" model="ir.ui.view">
+        <field name="name">rental.contract.search</field>
+        <field name="model">rental.contract</field>
+        <field name="arch" type="xml">
+            <search string="Rental Contracts">
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="unit_id"/>
+                <field name="property_id"/>
+                <filter string="Awaiting Signature" name="awaiting_signature" domain="[('state', '=', 'sent')]"/>
+                <filter string="Active" name="active" domain="[('state', '=', 'active')]"/>
+                <filter string="Short Term" name="short" domain="[('rental_type', '=', 'short')]"/>
+                <filter string="Long Term" name="long" domain="[('rental_type', '=', 'long')]"/>
+                <filter string="Starts This Month" name="starts_month" date="date_start" default_period="month"/>
+                <separator/>
+                <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                <filter string="Property" name="group_property" context="{'group_by': 'property_id'}"/>
+                <filter string="Unit" name="group_unit" context="{'group_by': 'unit_id'}"/>
+                <filter string="Tenant" name="group_tenant" context="{'group_by': 'partner_id'}"/>
+                <filter string="Rental Type" name="group_type" context="{'group_by': 'rental_type'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_rental_contract" model="ir.actions.act_window">
+        <field name="name">Rental Contracts</field>
+        <field name="res_model">rental.contract</field>
+        <field name="view_mode">list,calendar,form</field>
+        <field name="search_view_id" ref="view_rental_contract_search"/>
+    </record>
+
+    <record id="action_rental_contract_calendar" model="ir.actions.act_window">
+        <field name="name">Rental Calendar</field>
+        <field name="res_model">rental.contract</field>
+        <field name="view_mode">calendar,list,form</field>
+        <field name="domain">[('state', 'not in', ('cancelled',))]</field>
+    </record>
+</odoo>
