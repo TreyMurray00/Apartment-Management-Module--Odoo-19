@@ -1,6 +1,9 @@
 import base64
+import binascii
 import hashlib
 import logging
+from pathlib import PurePath
+import re
 from datetime import timedelta
 
 from markupsafe import escape
@@ -48,7 +51,7 @@ class RentalNoticeTemplate(models.Model):
             ("hand", "Hand Delivery"),
             ("registered_mail", "Registered Mail"),
             ("courier", "Courier"),
-            ("portal", "Tenant Portal"),
+            ("portal", "External Portal (Record Manually)"),
             ("other", "Other"),
         ],
         required=True, default="email",
@@ -60,6 +63,13 @@ class RentalNoticeTemplate(models.Model):
     internal_notes = fields.Html()
     notice_ids = fields.One2many("rental.notice", "template_id")
     notice_count = fields.Integer(compute="_compute_notice_count")
+
+    _ALLOWED_PLACEHOLDERS = {
+        "tenant_name", "tenant_address", "contract_number", "unit", "property",
+        "company_name", "notice_date", "response_deadline", "amount_due",
+        "invoice_references", "consecutive_missed_payments", "grounds",
+        "clause_references", "violation_details",
+    }
 
     _name_version_company_uniq = models.Constraint(
         "unique(name, version, company_id)",
@@ -82,6 +92,21 @@ class RentalNoticeTemplate(models.Model):
         for template in self:
             if template.notice_type == "late_payment" and template.default_ground != "nonpayment":
                 raise ValidationError(_("Late-payment templates must use the nonpayment ground."))
+
+    @api.constrains("subject", "body_html")
+    def _check_placeholders(self):
+        placeholder_pattern = re.compile(r"\{\{([^{}]+)\}\}")
+        for template in self:
+            content = "%s\n%s" % (template.subject or "", template.body_html or "")
+            if content.count("{{") != content.count("}}"):
+                raise ValidationError(_("Notice template placeholders have unmatched braces."))
+            used = {value.strip() for value in placeholder_pattern.findall(content)}
+            unsupported = used - self._ALLOWED_PLACEHOLDERS
+            if unsupported:
+                raise ValidationError(_(
+                    "Unsupported notice placeholder(s): %s",
+                    ", ".join(sorted(unsupported)),
+                ))
 
     @api.depends("notice_ids")
     def _compute_notice_count(self):
@@ -174,15 +199,35 @@ class RentalContractViolation(models.Model):
     )
     reported_on = fields.Datetime(readonly=True, default=fields.Datetime.now, copy=False)
     resolution_notes = fields.Text(tracking=True)
+    status_changed_by_id = fields.Many2one("res.users", readonly=True, copy=False)
+    status_changed_on = fields.Datetime(readonly=True, copy=False)
     notice_ids = fields.Many2many(
         "rental.notice", "rental_notice_violation_rel", "violation_id", "notice_id",
         string="Related Notices", readonly=True,
     )
 
+    @api.constrains("incident_date", "contract_id")
+    def _check_incident_date(self):
+        today = fields.Date.context_today(self)
+        for violation in self:
+            if violation.incident_date > today:
+                raise ValidationError(_("A contract violation cannot have a future incident date."))
+            if (
+                violation.contract_id.date_start
+                and violation.incident_date < violation.contract_id.date_start
+            ):
+                raise ValidationError(_("The incident date cannot precede the rental contract."))
+            if (
+                violation.contract_id.date_end
+                and violation.incident_date > violation.contract_id.date_end
+            ):
+                raise ValidationError(_("The incident date cannot be after the rental contract term."))
+
     @api.model_create_multi
     def create(self, vals_list):
         if not self.env.su and any(
             vals.get("state", "open") != "open" or vals.get("reported_by_id") or vals.get("reported_on")
+            or vals.get("status_changed_by_id") or vals.get("status_changed_on")
             for vals in vals_list
         ):
             raise AccessError(_("Violation audit fields can only be set by the rental workflow."))
@@ -190,10 +235,29 @@ class RentalContractViolation(models.Model):
 
     def write(self, vals):
         if not self.env.su:
-            if {"state", "reported_by_id", "reported_on", "contract_id"}.intersection(vals):
+            if {
+                "state", "reported_by_id", "reported_on", "status_changed_by_id",
+                "status_changed_on", "contract_id",
+            }.intersection(vals):
                 raise AccessError(_("Violation audit fields can only be changed by workflow actions."))
-            if any(violation.state not in ("open", "escalated") for violation in self):
-                raise UserError(_("Resolved or dismissed violations cannot be edited."))
+            if any(violation.state in ("cured", "dismissed") for violation in self):
+                raise UserError(_("Resolved or dismissed violations are immutable."))
+            factual_fields = {
+                "name", "contract_id", "clause_reference", "incident_date",
+                "description", "severity",
+            }
+            if factual_fields.intersection(vals) and any(
+                notice.reviewed_on or notice.state not in ("draft", "cancelled")
+                for violation in self for notice in violation.notice_ids
+            ):
+                raise UserError(_(
+                    "Violation facts that supported a reviewed notice are immutable. Add resolution notes instead."
+                ))
+            if any(
+                violation.state == "escalated" and set(vals).difference({"resolution_notes"})
+                for violation in self
+            ):
+                raise UserError(_("Escalated violation facts are frozen; only resolution notes can be added."))
         return super().write(vals)
 
     def unlink(self):
@@ -206,7 +270,13 @@ class RentalContractViolation(models.Model):
             "apartment_rental_management.group_rental_manager"
         ):
             raise AccessError(_("Only rental administrators can resolve or escalate violations."))
-        self.sudo().write({"state": state})
+        if state in ("cured", "dismissed") and any(not item.resolution_notes for item in self):
+            raise UserError(_("Enter resolution notes before curing or dismissing a violation."))
+        self.sudo().write({
+            "state": state, "status_changed_by_id": self.env.user.id,
+            "status_changed_on": fields.Datetime.now(),
+        })
+        self.message_post(body=_("Violation status changed to %s by %s.", state, self.env.user.name))
         return True
 
     def action_mark_cured(self):
@@ -287,7 +357,7 @@ class RentalNotice(models.Model):
         [
             ("email", "Email"), ("hand", "Hand Delivery"),
             ("registered_mail", "Registered Mail"), ("courier", "Courier"),
-            ("portal", "Tenant Portal"), ("other", "Other"),
+            ("portal", "External Portal (Record Manually)"), ("other", "Other"),
         ],
         required=True, default="email", tracking=True,
     )
@@ -299,18 +369,28 @@ class RentalNotice(models.Model):
     delivered_on = fields.Datetime(readonly=True, copy=False)
     delivery_reference = fields.Char(copy=False, tracking=True)
     delivery_notes = fields.Text(copy=False)
+    delivery_confirmed = fields.Boolean(
+        string="Delivery Confirmed", copy=False, tracking=True,
+        help="Confirm only after retaining evidence that satisfies the applicable service rules.",
+    )
     delivery_proof = fields.Binary(attachment=True, copy=False)
     delivery_proof_filename = fields.Char(copy=False)
     document_attachment_id = fields.Many2one(
         "ir.attachment", readonly=True, copy=False, ondelete="restrict"
     )
     document_hash = fields.Char(readonly=True, copy=False, index=True)
+    cancellation_reason = fields.Text(copy=False, tracking=True)
+    cancelled_by_id = fields.Many2one("res.users", readonly=True, copy=False)
+    cancelled_on = fields.Datetime(readonly=True, copy=False)
+
+    _MAX_DELIVERY_PROOF_SIZE = 10 * 1024 * 1024
 
     _AUDIT_FIELDS = {
         "state", "template_name", "template_version", "amount_due",
         "consecutive_missed_payments", "subject", "body_html", "eligibility_snapshot",
         "reviewed_by_id", "reviewed_on", "issued_by_id", "issued_on",
         "delivered_by_id", "delivered_on", "document_attachment_id", "document_hash",
+        "cancelled_by_id", "cancelled_on",
     }
 
     @api.model_create_multi
@@ -336,18 +416,54 @@ class RentalNotice(models.Model):
             if self._AUDIT_FIELDS.intersection(vals):
                 raise AccessError(_("Notice workflow and audit fields can only be changed by notice actions."))
             if any(notice.state != "draft" for notice in self):
+                if any(notice.state in ("delivered", "cancelled") for notice in self):
+                    raise UserError(_("Delivered or cancelled notice records are immutable."))
                 allowed_delivery = {
                     "delivery_method", "delivery_reference", "delivery_notes",
-                    "delivery_proof", "delivery_proof_filename",
+                    "delivery_confirmed", "delivery_proof", "delivery_proof_filename",
+                    "cancellation_reason",
                 }
                 if set(vals).difference(allowed_delivery):
                     raise UserError(_("Only delivery evidence can be edited after review."))
         return super().write(vals)
 
     def unlink(self):
-        if any(notice.state not in ("draft", "cancelled") for notice in self):
-            raise UserError(_("Reviewed, issued, or delivered notices cannot be deleted."))
+        if any(
+            notice.state != "draft" or notice.reviewed_on or notice.issued_on
+            or notice.document_attachment_id
+            for notice in self
+        ):
+            raise UserError(_(
+                "Only never-reviewed draft notices can be deleted. Cancelled and processed notices are retained for audit."
+            ))
         return super().unlink()
+
+    @api.constrains("delivery_proof", "delivery_proof_filename")
+    def _check_delivery_proof(self):
+        allowed_extensions = {".pdf", ".jpg", ".jpeg", ".png"}
+        for notice in self.filtered("delivery_proof"):
+            extension = PurePath(notice.delivery_proof_filename or "").suffix.lower()
+            if extension not in allowed_extensions:
+                raise ValidationError(_("Delivery proof must be a PDF, JPG, JPEG, or PNG file."))
+            try:
+                raw = base64.b64decode(notice.delivery_proof, validate=True)
+            except (binascii.Error, ValueError, TypeError):
+                raise ValidationError(_("The delivery proof is not valid base64 data."))
+            if len(raw) > self._MAX_DELIVERY_PROOF_SIZE:
+                raise ValidationError(_("Delivery proof cannot exceed 10 MB."))
+            valid = (
+                (extension == ".pdf" and raw.startswith(b"%PDF-"))
+                or (extension in (".jpg", ".jpeg") and raw.startswith(b"\xff\xd8\xff"))
+                or (extension == ".png" and raw.startswith(b"\x89PNG\r\n\x1a\n"))
+            )
+            if not valid:
+                raise ValidationError(_("The delivery-proof content does not match its filename."))
+
+    @api.constrains("delivery_confirmed", "state")
+    def _check_delivery_confirmation_state(self):
+        for notice in self:
+            if notice.delivery_confirmed and notice.state not in ("issued", "delivered"):
+                raise ValidationError(_("Delivery can only be confirmed after a notice is issued."))
 
     @api.onchange("template_id")
     def _onchange_template_id(self):
@@ -389,13 +505,17 @@ class RentalNotice(models.Model):
     def _eligibility_values(self, today=None):
         self.ensure_one()
         today = today or fields.Date.context_today(self)
-        if self.contract_id.state != "active":
-            raise UserError(_("Notices can only be prepared for active rental contracts."))
+        allowed_states = ("active", "ended") if self.notice_type == "late_payment" else ("active",)
+        if self.contract_id.state not in allowed_states:
+            raise UserError(_(
+                "Late-payment letters require an active or ended contract; eviction notices require an active contract."
+            ))
         self.template_id._check_can_apply(self.contract_id, self.notice_date or today)
 
         eligible = self.contract_id._eligible_overdue_rent_invoices(today)
-        selected_invoices = self.source_invoice_ids or eligible
+        selected_invoices = self.env["account.move"]
         if self.ground in ("nonpayment", "repeated_nonpayment"):
+            selected_invoices = self.source_invoice_ids or eligible
             if not selected_invoices:
                 raise UserError(_("No unpaid rent invoice is beyond the configured grace period."))
             invalid = selected_invoices - eligible
@@ -498,6 +618,11 @@ class RentalNotice(models.Model):
         for notice in self:
             if notice.state != "draft":
                 raise UserError(_("Only draft notices can be reviewed."))
+            today = fields.Date.context_today(notice)
+            if notice.notice_date != today:
+                raise UserError(_(
+                    "The notice date must be today when the content is reviewed. Update the date before review."
+                ))
             values = notice._eligibility_values()
             values.update({
                 "template_name": notice.template_id.name,
@@ -547,21 +672,36 @@ class RentalNotice(models.Model):
         )
         if not mail_template:
             raise UserError(_("The rental notice email template is not available."))
-        mail_template.send_mail(
-            self.id, force_send=True,
+        mail_id = mail_template.send_mail(
+            self.id, force_send=False,
             email_values={"attachment_ids": [Command.link(attachment.id)]},
         )
+        existing_notes = (self.delivery_notes or "").strip()
+        email_note = _(
+            "Email queued for %(email)s. Outgoing mail reference: %(mail)s. "
+            "A queued or sent email alone is not proof of legally effective service.",
+            email=self.partner_id.email, mail=mail_id or _("unavailable"),
+        )
         self.sudo().write({
-            "state": "delivered", "delivered_by_id": self.env.user.id,
-            "delivered_on": fields.Datetime.now(), "delivery_method": "email",
+            "delivery_method": "email",
+            "delivery_reference": self.delivery_reference or f"EMAIL-{mail_id or self.id}",
+            "delivery_notes": "\n\n".join(filter(None, [existing_notes, email_note])),
         })
-        self.message_post(body=_("Notice emailed to %s.", self.partner_id.email))
+        self.message_post(body=_(
+            "Notice email queued for %s. Delivery remains unconfirmed until evidence is recorded.",
+            self.partner_id.email,
+        ))
 
     def action_issue(self):
         self._check_manager()
+        self.ensure_one()
         for notice in self:
             if notice.state != "approved":
                 raise UserError(_("Only reviewed notices can be issued."))
+            if notice.notice_date != fields.Date.context_today(notice):
+                raise UserError(_(
+                    "The reviewed notice date is no longer today. Reset it to draft, update the date, and review again."
+                ))
             current = notice._eligibility_values()
             current_invoice_ids = set(current["source_invoice_ids"][0][2])
             current_violation_ids = set(current["violation_ids"][0][2])
@@ -591,7 +731,9 @@ class RentalNotice(models.Model):
         for notice in self:
             if notice.state != "issued":
                 raise UserError(_("Only issued notices can be marked delivered."))
-            if notice.delivery_method != "email" and not (
+            if not notice.delivery_confirmed:
+                raise UserError(_("Confirm delivery only after retaining legally appropriate evidence."))
+            if not (
                 notice.delivery_reference or notice.delivery_proof or notice.delivery_notes
             ):
                 raise UserError(_("Record a delivery reference, proof, or delivery note first."))
@@ -605,7 +747,13 @@ class RentalNotice(models.Model):
     def action_cancel(self):
         self._check_manager()
         for notice in self.filtered(lambda item: item.state in ("draft", "approved", "issued")):
-            notice.sudo().write({"state": "cancelled"})
+            if notice.state != "draft" and not notice.cancellation_reason:
+                raise UserError(_("Enter a cancellation reason for a reviewed or issued notice."))
+            notice.sudo().write({
+                "state": "cancelled", "cancelled_by_id": self.env.user.id,
+                "cancelled_on": fields.Datetime.now(), "delivery_confirmed": False,
+            })
+            notice.message_post(body=_("Notice cancelled by %s.", self.env.user.name))
         return True
 
     def action_reset_to_draft(self):
@@ -615,14 +763,21 @@ class RentalNotice(models.Model):
                 raise UserError(_("Only reviewed, unissued notices can be reset."))
             notice.sudo().write({
                 "state": "draft", "reviewed_by_id": False, "reviewed_on": False,
+                "notice_date": fields.Date.context_today(notice),
                 "template_name": False, "template_version": False,
                 "amount_due": 0, "consecutive_missed_payments": 0,
                 "subject": False, "body_html": False, "eligibility_snapshot": False,
+                "delivery_confirmed": False,
             })
         return True
 
     def action_preview_pdf(self):
         self.ensure_one()
+        if self.document_attachment_id:
+            return {
+                "type": "ir.actions.act_url", "target": "new",
+                "url": f"/web/content/{self.document_attachment_id.id}?download=false",
+            }
         return self.env.ref(
             "apartment_rental_management.action_report_rental_notice"
         ).report_action(self)
@@ -730,10 +885,11 @@ class RentalContractNotice(models.Model):
     def action_prepare_late_notice(self):
         self.ensure_one()
         self._check_notice_manager()
-        if self.state != "active":
-            raise UserError(_("Late-payment notices can only be prepared for active contracts."))
+        if self.state not in ("active", "ended"):
+            raise UserError(_("Late-payment notices can only be prepared for active or ended contracts."))
         if not self.late_notice_template_id:
             raise UserError(_("Configure a late-payment notice template on the contract first."))
+        self.env.cr.execute("SELECT pg_advisory_xact_lock(%s, %s)", (728642, self.id))
         eligible = self._eligible_overdue_rent_invoices()
         covered = self.env["rental.notice"].search([
             ("contract_id", "=", self.id), ("notice_type", "=", "late_payment"),
@@ -759,6 +915,15 @@ class RentalContractNotice(models.Model):
             raise UserError(_("Eviction notices can only be prepared for active contracts."))
         if not self.eviction_notice_template_id:
             raise UserError(_("Configure an eviction notice template on the contract first."))
+        self.env.cr.execute("SELECT pg_advisory_xact_lock(%s, %s)", (728643, self.id))
+        existing = self.env["rental.notice"].search([
+            ("contract_id", "=", self.id), ("notice_type", "=", "eviction"),
+            ("state", "in", ("draft", "approved", "issued")),
+        ], limit=1)
+        if existing:
+            raise UserError(_(
+                "An eviction notice for this contract is already pending or issued. Complete or cancel it before preparing another."
+            ))
         streak = self._consecutive_missed_rent_invoices()
         violations = self.violation_ids.filtered(lambda item: item.state in ("open", "escalated"))
         values = {
@@ -806,7 +971,7 @@ class RentalContractNotice(models.Model):
     @api.model
     def _cron_prepare_late_notice_drafts(self):
         contracts = self.search([
-            ("state", "=", "active"), ("auto_prepare_late_notices", "=", True),
+            ("state", "in", ("active", "ended")), ("auto_prepare_late_notices", "=", True),
             ("late_notice_template_id", "!=", False),
         ])
         for contract in contracts:

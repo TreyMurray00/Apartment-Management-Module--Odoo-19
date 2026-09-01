@@ -7,8 +7,6 @@
         <field name="report_name">apartment_rental_management.report_rental_notice_document</field>
         <field name="report_file">apartment_rental_management.report_rental_notice_document</field>
         <field name="print_report_name">'Tenant Notice - %s' % object.name</field>
-        <field name="binding_model_id" ref="model_rental_notice"/>
-        <field name="binding_type">report</field>
     </record>
 
     <template id="report_rental_notice_document">
@@ -16,6 +14,12 @@
             <t t-foreach="docs" t-as="o">
                 <t t-call="web.external_layout">
                     <div class="page">
+                        <div t-if="o.state == 'approved'" class="alert alert-warning text-center">
+                            <strong>REVIEWED DRAFT — NOT YET ISSUED</strong>
+                        </div>
+                        <div t-if="o.state == 'cancelled'" class="alert alert-danger text-center">
+                            <strong>CANCELLED — NOT FOR SERVICE OR RELIANCE</strong>
+                        </div>
                         <div class="text-center mb-4">
                             <h2><span t-field="o.notice_type"/></h2>
                             <h4 t-field="o.name"/>

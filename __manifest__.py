@@ -1,6 +1,6 @@
 {
     "name": "Apartment Rental Management",
-    "version": "19.0.5.0.0",
+    "version": "19.0.5.1.0",
     "category": "Real Estate",
     "summary": "Short and long-term apartment rentals, contracts, signatures and invoicing",
     "author": "Community",

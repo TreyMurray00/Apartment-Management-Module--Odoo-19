@@ -361,10 +361,24 @@ class TestRentalContract(AccountTestInvoicingCommon):
         self.assertEqual(notice.state, "issued")
         self.assertTrue(notice.document_attachment_id)
         self.assertTrue(notice.document_hash)
-        notice.write({"delivery_reference": "HAND-001"})
+        preview_action = notice.action_preview_pdf()
+        self.assertEqual(preview_action["type"], "ir.actions.act_url")
+        self.assertIn(f"/web/content/{notice.document_attachment_id.id}", preview_action["url"])
+        with self.assertRaises(UserError):
+            notice.action_mark_delivered()
+        with self.assertRaises(ValidationError):
+            notice.write({
+                "delivery_proof_filename": "proof.pdf",
+                "delivery_proof": base64.b64encode(b"not a PDF"),
+            })
+        notice.write({"delivery_reference": "HAND-001", "delivery_confirmed": True})
         notice.action_mark_delivered()
         self.assertEqual(notice.state, "delivered")
         self.assertTrue(notice.delivered_on)
+        with self.assertRaises(UserError):
+            notice.with_user(self.rental_manager).write({"delivery_reference": "CHANGED"})
+        with self.assertRaises(UserError):
+            notice.unlink()
 
     def test_late_notice_waits_until_grace_period_has_elapsed(self):
         contract = self._activate_notice_contract()
@@ -387,6 +401,8 @@ class TestRentalContract(AccountTestInvoicingCommon):
         action = contract.action_prepare_eviction_notice()
         notice = self.env["rental.notice"].browse(action["res_id"])
         self.assertEqual(notice.ground, "repeated_nonpayment")
+        with self.assertRaises(UserError):
+            contract.action_prepare_eviction_notice()
         notice.action_approve()
         self.assertEqual(notice.consecutive_missed_payments, 3)
         self.assertEqual(len(notice.source_invoice_ids), 3)
@@ -397,20 +413,31 @@ class TestRentalContract(AccountTestInvoicingCommon):
             body_html="<p>Clause {{ clause_references }}: {{ violation_details }}</p>",
         )
         contract = self._activate_notice_contract(
-            eviction_notice_template_id=eviction_template.id
+            eviction_notice_template_id=eviction_template.id,
+            eviction_nonpayment_threshold=3,
         )
+        self._post_overdue_rent_invoice(contract, contract.billing_line_ids)
         violation = self.env["rental.contract.violation"].create({
             "name": "Unauthorized subletting", "contract_id": contract.id,
-            "clause_reference": "Clause 8.2", "incident_date": "2026-02-01",
+            "clause_reference": "Clause 8.2", "incident_date": contract.date_start,
             "description": "A third party occupied the unit without written consent.",
             "severity": "material",
         })
+        violation.action_escalate()
+        with self.assertRaises(UserError):
+            violation.with_user(self.rental_manager).write({"description": "Changed facts"})
         action = contract.action_prepare_eviction_notice()
         notice = self.env["rental.notice"].browse(action["res_id"])
         self.assertEqual(notice.ground, "contract_violation")
         self.assertEqual(notice.violation_ids, violation)
         notice.action_approve()
+        self.assertFalse(notice.source_invoice_ids)
+        self.assertEqual(notice.amount_due, 0)
         self.assertIn("Clause 8.2", notice.body_html)
+        violation.action_reopen()
+        with self.assertRaises(UserError):
+            violation.with_user(self.rental_manager).write({"description": "Rewritten facts"})
+        violation.write({"resolution_notes": "Tenant removed the unauthorized occupant."})
         violation.action_mark_cured()
         with self.assertRaises(UserError):
             notice.action_issue()
@@ -419,9 +446,39 @@ class TestRentalContract(AccountTestInvoicingCommon):
         late_template = self._create_notice_template("late_payment")
         contract = self._activate_notice_contract(late_notice_template_id=late_template.id)
         self._post_overdue_rent_invoice(contract, contract.billing_line_ids)
-        contract.action_prepare_late_notice()
+        action = contract.action_prepare_late_notice()
+        notice = self.env["rental.notice"].browse(action["res_id"])
+        with self.assertRaises(UserError):
+            contract.action_prepare_late_notice()
         with self.assertRaises(UserError):
             late_template.write({"subject": "Changed after use"})
+        notice.action_approve()
+        notice.write({"cancellation_reason": "Prepared against the wrong correspondence address."})
+        notice.action_cancel()
+        self.assertEqual(notice.state, "cancelled")
+        self.assertTrue(notice.cancelled_on)
+        with self.assertRaises(UserError):
+            notice.unlink()
+
+    def test_ended_contract_can_still_receive_late_payment_letter(self):
+        late_template = self._create_notice_template("late_payment")
+        contract = self._activate_notice_contract(late_notice_template_id=late_template.id)
+        self._post_overdue_rent_invoice(contract, contract.billing_line_ids)
+        contract.action_end()
+        action = contract.action_prepare_late_notice()
+        notice = self.env["rental.notice"].browse(action["res_id"])
+        self.assertEqual(contract.state, "ended")
+        self.assertEqual(notice.notice_type, "late_payment")
+
+    def test_notice_template_rejects_unknown_placeholder(self):
+        with self.assertRaises(ValidationError):
+            self._create_notice_template(
+                "late_payment", subject="Unknown {{ tenant_magic_value }}"
+            )
+        with self.assertRaises(ValidationError):
+            self._create_notice_template(
+                "late_payment", subject="Broken {{ tenant_name }"
+            )
 
     def test_rental_user_cannot_review_legal_notice(self):
         late_template = self._create_notice_template("late_payment")

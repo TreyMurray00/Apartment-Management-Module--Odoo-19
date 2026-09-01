@@ -205,20 +205,28 @@
                         <page string="Delivery">
                             <group>
                                 <group>
-                                    <field name="delivery_method" readonly="state in ('delivered', 'cancelled')"/>
-                                    <field name="delivery_reference"/>
-                                    <field name="delivery_notes"/>
+                            <field name="delivery_method" readonly="state in ('delivered', 'cancelled')"/>
+                                    <field name="delivery_reference" readonly="state in ('delivered', 'cancelled')"/>
+                                    <field name="delivery_notes" readonly="state in ('delivered', 'cancelled')"/>
+                                    <field name="delivery_confirmed" readonly="state != 'issued'"/>
                                 </group>
                                 <group>
                                     <field name="delivered_by_id" widget="many2one_avatar_user" invisible="not delivered_on"/>
                                     <field name="delivered_on" invisible="not delivered_on"/>
                                     <field name="delivery_proof_filename" invisible="1"/>
-                                    <field name="delivery_proof" filename="delivery_proof_filename"/>
+                                    <field name="delivery_proof" filename="delivery_proof_filename" readonly="state in ('delivered', 'cancelled')"/>
                                 </group>
                             </group>
                         </page>
                         <page string="Eligibility Audit" groups="apartment_rental_management.group_rental_manager" invisible="not eligibility_snapshot">
                             <field name="eligibility_snapshot" readonly="1" nolabel="1"/>
+                        </page>
+                        <page string="Cancellation" invisible="state not in ('approved', 'issued', 'cancelled')">
+                            <group>
+                                <field name="cancellation_reason" readonly="state == 'cancelled'"/>
+                                <field name="cancelled_by_id" widget="many2one_avatar_user" invisible="not cancelled_on"/>
+                                <field name="cancelled_on" invisible="not cancelled_on"/>
+                            </group>
                         </page>
                     </notebook>
                 </sheet>
@@ -293,18 +301,20 @@
                         <group>
                             <field name="contract_id" readonly="state not in ('open', 'escalated')" options="{'no_create': True}"/>
                             <field name="partner_id" readonly="1"/>
-                            <field name="incident_date" readonly="state not in ('open', 'escalated')"/>
-                            <field name="severity" readonly="state not in ('open', 'escalated')"/>
+                            <field name="incident_date" readonly="state != 'open'"/>
+                            <field name="severity" readonly="state != 'open'"/>
                             <field name="company_id" groups="base.group_multi_company" readonly="1"/>
                         </group>
                         <group>
-                            <field name="clause_reference" readonly="state not in ('open', 'escalated')"/>
+                            <field name="clause_reference" readonly="state != 'open'"/>
                             <field name="reported_by_id" widget="many2one_avatar_user"/>
                             <field name="reported_on"/>
+                            <field name="status_changed_by_id" widget="many2one_avatar_user" invisible="not status_changed_on"/>
+                            <field name="status_changed_on" invisible="not status_changed_on"/>
                         </group>
                     </group>
-                    <group string="Incident"><field name="description" readonly="state not in ('open', 'escalated')"/></group>
-                    <group string="Resolution"><field name="resolution_notes"/></group>
+                    <group string="Incident"><field name="description" readonly="state != 'open'"/></group>
+                    <group string="Resolution"><field name="resolution_notes" readonly="state in ('cured', 'dismissed')"/></group>
                     <field name="notice_ids" widget="many2many_tags" readonly="1"/>
                 </sheet>
                 <chatter/>
